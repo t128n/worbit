@@ -5,8 +5,9 @@ Base: **Orbit v0.3.0**, commit `a7402204c7cadcac4747cbf47a60685a20f59498`.
 | Patch | Upstream | Contents |
 |---|---|---|
 | `0001-feat-windows-native-service.patch` | #81 | Native SCM service, `--name`/`--env-file`, `ORBIT_LOG_FILE`, Windows backup rename fixes |
-| `0002-feat-ghec-host.patch` | #82 | Pending port from `t128n/orbit` |
-| `0003-feat-github-polling.patch` | #83 | Pending port from `t128n/orbit` |
+| `0002-feat-github-enterprise-host.patch` | #82 | Configurable GHES/GHEC host, derived endpoints, host binding |
+
+Polling is not included.
 
 ## 0001 details
 
@@ -32,6 +33,35 @@ depend on machine-wide `ORBIT_*` variables:
 orbit.exe __service-run --name Orbit --env-file C:\ProgramData\Worbit\config\worbit.env
 ```
 
+## 0002 details
+
+Code:
+
+- `crates/platform/src/github.rs` — `GitHubHost`, host validation and derived
+  endpoints.
+- `crates/platform/src/config.rs` — `ORBIT_GITHUB_URL`.
+- `apps/server/src/sign_in_providers.rs`, `auth_routes/`, `repositories/` —
+  GitHub OAuth and 2FA use the configured host.
+- `apps/server/src/integration_routes.rs` — App manifest, installation and
+  webhook URLs use the configured host.
+- `apps/server/src/task_routes.rs`, `repositories/tasks.rs` — issue/pull URLs
+  use the configured host.
+- `crates/platform/src/http/security.rs` — CSP `form-action` includes the host.
+- `apps/server/src/github_binding.rs` — refuses to change hosts after GitHub
+  data exists.
+
+The binding table is created by code, not by a migration:
+
+```sql
+CREATE TABLE IF NOT EXISTS worbit_github_host_binding (
+    singleton BIGINT PRIMARY KEY CHECK (singleton = 1),
+    origin TEXT NOT NULL
+);
+```
+
+That keeps `schema_migrations` at the stock Orbit version. The `worbit_` prefix
+avoids a collision if upstream ever adds its own binding table.
+
 ## Generating a patch
 
 Use `git format-patch` from the authoring fork; do not edit the `.patch` file.
@@ -53,5 +83,6 @@ Keep the subject, author, date, and body. Rename to
 3. Build and run the Windows tests.
 4. Re-export the patch and rerun `verify.ps1`.
 
-Migration numbers are the most common collision. Upstream is already past
-`0099` on `main`; use the next free number in both migration directories.
+Do not add a custom migration for worbit-only schema. Create an unmanaged
+`worbit_*` table at startup instead. Upstream is already past `0099` on `main`;
+a custom migration makes the database unreadable by stock Orbit.

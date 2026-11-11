@@ -3,25 +3,27 @@
 Reproducible Windows builds of [Orbit](https://github.com/coollabsio/orbit) with:
 
 - a **native Windows Service** (`orbit service install`), no WinSW or NSSM;
-- **GitHub Enterprise** host support (GHES and GHEC with data residency);
-- **polling sync** for installations that cannot receive inbound webhooks.
+- **GitHub Enterprise** host support (GHES and GHEC with data residency).
 
 `worbit` is not a fork. It pins one upstream release tag, applies a small patch
 series, and publishes a Windows binary plus install scripts. Upstream source is
 never vendored in this repository.
+
+Polling is intentionally not included.
 
 ## Status
 
 | Piece | State |
 |---|---|
 | `0001` native Windows Service | implemented in `patches/` |
-| `0002` GitHub Enterprise host | port pending from `t128n/orbit` |
-| `0003` GitHub polling sync | port pending from `t128n/orbit` |
-| Windows CI + service smoke test | scaffolded |
-| Release packaging | scaffolded |
+| `0002` GitHub Enterprise host | implemented in `patches/` |
+| Windows CI + service smoke test | passing |
+| Release packaging | passing |
 
-Until `0002` and `0003` land, the build is stock Orbit plus the Windows
-Service patch.
+The build is Orbit `v0.3.0` plus the native Windows Service and GitHub
+Enterprise host patches. The main database schema remains stock Orbit `0092`;
+the only extra table is the unmanaged `worbit_github_host_binding` used to keep
+the configured GitHub host immutable.
 
 ## How it works
 
@@ -104,7 +106,7 @@ Each release contains:
 patches/        ordered upstream patches
 scripts/        bootstrap, verify, apply, build, package
 windows/        native-service install/uninstall helpers and env example
-docs/           build, deployment, GitHub, polling, patch, upgrade notes
+docs/           build, deployment, GitHub, patch, upgrade notes
 tests/          binary and service smoke tests
 .github/        build, patch-verification, and release workflows
 ```

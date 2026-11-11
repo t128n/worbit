@@ -45,7 +45,7 @@ foreach ($file in @("LICENSE", "NOTICE", "VERSION")) {
 
 $docs = Join-Path $stage "docs"
 New-Item -ItemType Directory -Force $docs | Out-Null
-foreach ($file in @("deploy-windows.md", "upgrade.md", "github-enterprise.md", "polling.md")) {
+foreach ($file in @("deploy-windows.md", "upgrade.md", "github-enterprise.md")) {
     Copy-Item (Join-Path $script:WorbitRoot "docs" $file) (Join-Path $docs $file)
 }
 

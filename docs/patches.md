@@ -10,16 +10,17 @@ hand.
 patches/
 ├── series
 ├── 0001-feat-windows-native-service.patch
-├── 0002-feat-ghec-host.patch          (pending)
-└── 0003-feat-github-polling.patch     (pending)
+└── 0002-feat-github-enterprise-host.patch
 ```
 
 `series` controls order and can carry comments:
 
 ```text
 0001-feat-windows-native-service.patch
-# 0002-feat-ghec-host.patch
+0002-feat-github-enterprise-host.patch
 ```
+
+Polling is not part of the series.
 
 ## Verify
 
@@ -62,16 +63,15 @@ git format-patch upstream/v0.4.0..HEAD --output-directory ../worbit/patches
 Rename the files to the `NNNN-type-slug.patch` convention and update `series`.
 Update `upstream.lock` and `VERSION` in the same commit.
 
-## Watch for migration collisions
+## Do not add migrations
 
-Upstream adds migrations quickly. The polling patch originally used `0079`,
-which upstream has since taken (`0079_apns_devices.sql`). A new patch must:
+A custom migration makes `schema_migrations` newer than stock Orbit, so an
+official binary refuses to open the database (`SchemaNewer`, `UnknownMigration`,
+or `ChecksumMismatch`).
 
-- use the next free number in `apps/server/migrations/`;
-- add the same change under `apps/server/migrations/postgres/`;
-- update the schema-version assertion in the platform tests.
-
-`verify.ps1` catches the conflict before the build.
+Worbit-only schema must be created by code in an unmanaged `worbit_*` table.
+The GitHub host binding already uses `worbit_github_host_binding`. Keep the
+prefix so an upstream feature cannot collide with it.
 
 ## Keep the series small
 
@@ -86,5 +86,4 @@ which upstream has since taken (`0079_apns_devices.sql`). A new patch must:
 | Patch | Issue | State |
 |---|---|---|
 | Native Windows Service | coollabsio/orbit#81 | local, upstreamable |
-| GitHub Enterprise host | coollabsio/orbit#82 | port pending |
-| GitHub polling sync | coollabsio/orbit#83 | port pending |
+| GitHub Enterprise host | coollabsio/orbit#82 | local, upstreamable |

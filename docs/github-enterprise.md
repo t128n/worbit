@@ -1,31 +1,28 @@
 # GitHub Enterprise
 
-> Status: the configurable-host patch (`0002`) is being ported from
-> `t128n/orbit`. Until it lands, the build talks only to `github.com`.
+`worbit` adds one setting, `ORBIT_GITHUB_URL`, and uses it for every GitHub
+URL and API call. It supports GitHub Enterprise Server and GitHub Enterprise
+Cloud with data residency.
 
 ## GHES versus GHEC
 
-The host setting must distinguish two layouts:
-
-| Deployment | Web host | REST API base |
+| Deployment | `ORBIT_GITHUB_URL` | REST API base |
 |---|---|---|
-| GitHub.com | `https://github.com` | `https://api.github.com` |
-| GHES | `https://ghe.example.com` | `https://ghe.example.com/api/v3` |
-| GHEC with data residency | `https://acme.ghe.com` | `https://api.acme.ghe.com` |
+| GitHub.com | unset or `https://github.com` | `https://api.github.com/` |
+| GHES | `https://ghe.example.com` | `https://ghe.example.com/api/v3/` |
+| GHEC with data residency | `https://acme.ghe.com` | `https://api.acme.ghe.com/` |
 
-A single `ORBIT_GITHUB_URL` covers the web host; derive the API base per
-deployment instead of appending `/api/v3` unconditionally. GHEC data-residency
-hosts do **not** use `/api/v3`.
+The host parser rejects HTTP, credentials, paths, query strings, fragments and
+multi-label `*.ghe.com` hosts. GHEC data-residency hosts do not use `/api/v3`.
 
-## What the patch changes
+## What changes
 
-- App manifest registration URL
-- Manifest code conversion endpoint
+- GitHub sign-in OAuth authorize and token URLs
+- GitHub App manifest URL and manifest-code conversion endpoint
 - App installation URL
-- GitHub sign-in OAuth authorize/token endpoints
-- GitHub REST calls
+- GitHub REST and GraphQL calls
+- Issue and pull-request links stored on tasks
 - Link-preview allowlist and the CSP `form-action` origin
-- Validation of `ORBIT_GITHUB_URL` (HTTPS, no credentials, no query/fragment)
 
 ## Configuration
 
@@ -33,35 +30,52 @@ hosts do **not** use `/api/v3`.
 ORBIT_GITHUB_URL=https://acme.ghe.com
 ```
 
-Default remains `https://github.com`.
+Leave it unset for github.com. Set it before the first GitHub App, sign-in
+provider or task link is created.
 
-Private GHES hosts are legitimate. Allow them explicitly; do not treat every
-private address as an SSRF failure, but keep the setting admin-only and validate
-the scheme.
+## Host binding
+
+The first startup with GitHub data binds the database to one origin:
+
+- Existing legacy GitHub data binds to `https://github.com`.
+- A new database binds to the configured host.
+- A later startup with a different host is refused with a clear error.
+
+The binding lives in an unmanaged table, created by code:
+
+```sql
+CREATE TABLE IF NOT EXISTS worbit_github_host_binding (
+    singleton BIGINT PRIMARY KEY CHECK (singleton = 1),
+    origin TEXT NOT NULL
+);
+```
+
+It is deliberately not a migration. The main `schema_migrations` stays at the
+stock Orbit version, so an official Orbit binary can still open the database.
+The `worbit_` prefix avoids a collision if upstream adds the same feature.
+
+Treat the host as immutable for the life of the database. Changing it would
+point existing App IDs, installation IDs and identity subjects at a different
+GitHub instance.
 
 ## Create the GitHub App
 
-1. Open `https://<host>/settings/apps/new` (organization settings for an org
-   owner).
+1. Open `https://<host>/settings/apps/new` as an organization owner.
 2. Use the manifest flow Orbit presents.
-3. Grant the same repository permissions Orbit uses on github.com.
+3. Grant the repository permissions Orbit uses on github.com.
 4. Install the App on the repositories Orbit should sync.
+5. Configure the webhook URL to
+   `https://<orbit-origin>/api/v1/integrations/github/webhook`.
 
-For polling, the App needs the same permissions; no inbound webhook route is
-required.
-
-## Webhooks versus polling
-
-- **Webhooks**: GitHub must be able to reach `{origin}/api/v1/integrations/github/webhook`.
-- **Polling**: Orbit reaches GitHub on a schedule. Use it when GitHub cannot
-  route to the Orbit server, including GHEC behind a private network.
-
-See [polling.md](polling.md).
+The GitHub instance must be able to reach that URL. Polling is not part of
+`worbit`; a network where GitHub cannot reach Orbit needs a reverse proxy,
+tunnel, or a different deployment.
 
 ## Verification
 
 - The manifest conversion succeeds and stores an App ID, slug, and private key.
 - The installation list returns the expected account and repositories.
 - A test issue with the project label appears as an Orbit task.
-- Removing the label pauses the link; re-adding it resumes.
+- Removing the label pauses the link; adding it back resumes.
 - Sign-in with GitHub returns to the configured host, not github.com.
+- An issue link points at `https://<host>/<owner>/<repo>/issues/<n>`.

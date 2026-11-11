@@ -58,11 +58,18 @@ ORBIT_ATTACHMENTS_PATH=C:\ProgramData\Worbit\data\attachments
 ORBIT_BACKUPS_PATH=C:\ProgramData\Worbit\backups
 ORBIT_APP_KEY_FILE=C:\ProgramData\Worbit\config\app.key
 ORBIT_LOG_FILE=C:\ProgramData\Worbit\logs\orbit.log
+
+# Optional: GitHub Enterprise. Leave unset for github.com.
+# ORBIT_GITHUB_URL=https://ghe.example.com
 ```
 
 Production validation refuses to start without an HTTPS `ORBIT_PUBLIC_ORIGIN`
 and at least one trusted proxy network. Add the proxy addresses; never use
 `0.0.0.0/0` or `::/0`.
+
+For GitHub Enterprise, set `ORBIT_GITHUB_URL` before the first GitHub App,
+sign-in provider, or task link is created. The database is bound to that host
+and refuses a later change. See [github-enterprise.md](github-enterprise.md).
 
 ## Reverse proxy
 
