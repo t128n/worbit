@@ -1,4 +1,4 @@
-From 16e958673060ea2dea36766380bf556ff75561f0 Mon Sep 17 00:00:00 2001
+From 28761119017840768b7df3e6b91ec3143f09e760 Mon Sep 17 00:00:00 2001
 From: Torben Haack <t128n@ipv4.8shield.net>
 Date: Wed, 11 Nov 2026 19:21:12 +0100
 Subject: [PATCH] feat(windows): add native Windows Service support
@@ -9,11 +9,11 @@ Adds 'orbit service install' and 'orbit service uninstall' with --name and --env
  apps/server/Cargo.toml               |   3 +
  apps/server/src/cli.rs               |  46 +++
  apps/server/src/main.rs              |  30 +-
- apps/server/src/windows_service.rs   | 411 +++++++++++++++++++++++++++
+ apps/server/src/windows_service.rs   | 414 +++++++++++++++++++++++++++
  crates/platform/src/backup.rs        |  73 ++++-
  crates/platform/src/config.rs        | 136 +++++++++
  crates/platform/src/observability.rs |  41 ++-
- 8 files changed, 738 insertions(+), 20 deletions(-)
+ 8 files changed, 741 insertions(+), 20 deletions(-)
  create mode 100644 apps/server/src/windows_service.rs
 
 diff --git a/Cargo.lock b/Cargo.lock
@@ -200,10 +200,10 @@ index 7a90530..9f9461f 100644
                  println!("{output}");
 diff --git a/apps/server/src/windows_service.rs b/apps/server/src/windows_service.rs
 new file mode 100644
-index 0000000..fb14d20
+index 0000000..9bbb70a
 --- /dev/null
 +++ b/apps/server/src/windows_service.rs
-@@ -0,0 +1,411 @@
+@@ -0,0 +1,414 @@
 +//! Runs Orbit as a native Windows Service and manages its registration with the Service
 +//! Control Manager (SCM). Compiled only on Windows (`main.rs` gates this module on
 +//! `#[cfg(windows)]`), so every item here can assume a real SCM is available.
@@ -446,8 +446,11 @@ index 0000000..fb14d20
 +
 +define_windows_service!(ffi_service_main, service_main);
 +
-+fn service_main(arguments: Vec<OsString>) {
-+    let options = ServiceOptions::parse(&arguments);
++fn service_main(_arguments: Vec<OsString>) {
++    // The SCM passes StartService arguments here; they are empty for an auto-start service.
++    // The name and env file live in the process command line, which is always available.
++    let process_arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
++    let options = ServiceOptions::parse(&process_arguments);
 +    // No console and no stdout/stderr from here on: ORBIT_LOG_FILE is the only way to see
 +    // what Orbit does. A failure before tracing initializes cannot be reported anywhere.
 +    let environment = match Config::environment_with_file(options.env_file.as_deref()) {
