@@ -1,0 +1,145 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["worbit-v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keep patch files LF
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .work/orbit -> target
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Bootstrap upstream
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1
+
+      - name: Verify patch series
+        shell: pwsh
+        run: ./scripts/verify.ps1
+
+      - name: Apply patch series
+        shell: pwsh
+        run: ./scripts/apply.ps1
+
+      - name: Build
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      - name: Test the platform and server libraries
+        shell: pwsh
+        run: |
+          $env:ORBIT_BUILD_REVISION = (git -C .work/orbit rev-parse --short=12 HEAD).Trim()
+          Push-Location .work/orbit
+          try {
+            cargo test --locked -p orbit-platform -p orbit-server --lib
+            if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Smoke test the binary
+        shell: pwsh
+        run: ./tests/smoke.ps1
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Native service install/start/stop test
+        shell: pwsh
+        run: |
+          $install = Join-Path $env:ProgramFiles "WorbitTest"
+          $data = Join-Path $env:ProgramData "WorbitTest"
+          New-Item -ItemType Directory -Force $data | Out-Null
+          $bytes = [byte[]]::new(32)
+          [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+          $key = [Convert]::ToBase64String($bytes)
+          Set-Content (Join-Path $data "app.key") $key -NoNewline
+          $envFile = Join-Path $data "test.env"
+          @"
+          ORBIT_ENV=development
+          ORBIT_BIND=127.0.0.1
+          ORBIT_PORT=18080
+          ORBIT_DATABASE_PATH=$data\data\orbit.sqlite
+          ORBIT_ATTACHMENTS_PATH=$data\data\attachments
+          ORBIT_BACKUPS_PATH=$data\backups
+          ORBIT_APP_KEY_FILE=$data\app.key
+          ORBIT_LOG_FILE=$data\logs\orbit.log
+          "@ | Set-Content $envFile
+
+          ./windows/install.ps1 `
+            -Source ./.work/orbit/target/release/orbit.exe `
+            -InstallDir $install `
+            -DataDir $data `
+            -ServiceName WorbitTest `
+            -EnvFile $envFile
+
+          $deadline = (Get-Date).AddSeconds(60)
+          do {
+            Start-Sleep -Seconds 2
+            try {
+              $response = Invoke-WebRequest http://127.0.0.1:18080/health/live -UseBasicParsing -TimeoutSec 5
+              if ($response.StatusCode -eq 200) { break }
+            } catch {
+              if ((Get-Date) -gt $deadline) {
+                Get-Content (Join-Path $data "logs/orbit.log") -Tail 200 -ErrorAction SilentlyContinue
+                throw
+              }
+            }
+          } while ((Get-Date) -lt $deadline)
+
+          if ($response.StatusCode -ne 200) {
+            Get-Content (Join-Path $data "logs/orbit.log") -Tail 200 -ErrorAction SilentlyContinue
+            throw "health check did not return 200"
+          }
+
+          Stop-Service WorbitTest
+          (Get-Service WorbitTest).WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+
+      - name: Remove the test service
+        if: always()
+        shell: pwsh
+        run: |
+          $install = Join-Path $env:ProgramFiles "WorbitTest"
+          $data = Join-Path $env:ProgramData "WorbitTest"
+          try {
+            ./windows/uninstall.ps1 -InstallDir $install -DataDir $data -ServiceName WorbitTest -RemoveFiles
+          } catch {
+            Write-Warning $_
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: worbit-windows
+          path: |
+            artifacts/*.zip
+            artifacts/SHA256SUMS
+          if-no-files-found: error

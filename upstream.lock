@@ -1,0 +1,5 @@
+[upstream]
+repository = "https://github.com/coollabsio/orbit.git"
+tag = "v0.3.0"
+commit = "a7402204c7cadcac4747cbf47a60685a20f59498"
+verified = "2026-11-11"

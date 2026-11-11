@@ -1,0 +1,7 @@
+.work/
+artifacts/
+dist/
+*.zip
+*.log
+*.env
+!*.env.example

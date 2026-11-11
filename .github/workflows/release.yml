@@ -1,0 +1,96 @@
+name: release
+
+on:
+  push:
+    tags: ["worbit-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keep patch files LF
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Check the tag against VERSION
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $expected = "worbit-v$version"
+          if ($env:GITHUB_REF_NAME -ne $expected) {
+            throw "tag '$env:GITHUB_REF_NAME' does not match VERSION; expected '$expected'"
+          }
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .work/orbit -> target
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - name: Bootstrap upstream
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1
+
+      - name: Verify patch series
+        shell: pwsh
+        run: ./scripts/verify.ps1
+
+      - name: Apply patch series
+        shell: pwsh
+        run: ./scripts/apply.ps1
+
+      - name: Build
+        shell: pwsh
+        run: ./scripts/build.ps1
+
+      - name: Test the platform and server libraries
+        shell: pwsh
+        run: |
+          $env:ORBIT_BUILD_REVISION = (git -C .work/orbit rev-parse --short=12 HEAD).Trim()
+          Push-Location .work/orbit
+          try {
+            cargo test --locked -p orbit-platform -p orbit-server --lib
+            if ($LASTEXITCODE -ne 0) { throw "cargo test failed" }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Smoke test the binary
+        shell: pwsh
+        run: ./tests/smoke.ps1
+
+      - name: Package
+        shell: pwsh
+        run: ./scripts/package.ps1
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = (Get-Content VERSION -Raw).Trim()
+          $assets = @(Get-ChildItem ./artifacts -File |
+            Where-Object { $_.Extension -eq ".zip" -or $_.Name -eq "SHA256SUMS" } |
+            ForEach-Object FullName)
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets `
+              --title "worbit $version" `
+              --notes "Upstream Orbit from upstream.lock; see CHANGELOG.md." `
+              --generate-notes
+          }

@@ -1,0 +1,11 @@
+Worbit
+Copyright 2026 Torben Haack
+
+This repository contains patches, build scripts, and packaging for Orbit
+(https://github.com/coollabsio/orbit), Copyright coollabsio and Orbit
+contributors, licensed under the Apache License, Version 2.0.
+
+The worbit patches and scripts are licensed under the Apache License, Version
+2.0. Built binaries include Orbit source code and remain subject to Orbit's
+license and notices. Every distributed artifact must include the upstream
+LICENSE and NOTICE files from the pinned upstream checkout.

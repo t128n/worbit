@@ -1,0 +1,40 @@
+name: verify patches
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-upstream:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keep patch files LF
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Resolve the latest upstream release
+        id: upstream
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = gh api repos/coollabsio/orbit/releases/latest --jq .tag_name
+          if (-not $tag) { throw "no upstream release found" }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          Write-Host "Latest upstream release: $tag"
+
+      - name: Check out the latest upstream release
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch "${{ steps.upstream.outputs.tag }}" `
+            https://github.com/coollabsio/orbit.git .work/latest
+
+      - name: Check the series against the latest release
+        shell: pwsh
+        run: ./scripts/verify.ps1 -RepoPath .work/latest

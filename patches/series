@@ -1,0 +1,6 @@
+# Applied in filename order. Comments and blank lines are ignored.
+0001-feat-windows-native-service.patch
+
+# Pending ports from t128n/orbit-cx:
+# 0002-feat-ghec-host.patch
+# 0003-feat-github-polling.patch
