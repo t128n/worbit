@@ -1,6 +1,6 @@
 # GitHub polling sync
 
-> Status: the polling patch (`0003`) is being ported from `t128n/orbit-cx`.
+> Status: the polling patch (`0003`) is being ported from `t128n/orbit`.
 > Until it lands, the build uses webhooks only.
 
 ## Why polling

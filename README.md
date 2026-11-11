@@ -15,8 +15,8 @@ never vendored in this repository.
 | Piece | State |
 |---|---|
 | `0001` native Windows Service | implemented in `patches/` |
-| `0002` GitHub Enterprise host | port pending from `t128n/orbit-cx` |
-| `0003` GitHub polling sync | port pending from `t128n/orbit-cx` |
+| `0002` GitHub Enterprise host | port pending from `t128n/orbit` |
+| `0003` GitHub polling sync | port pending from `t128n/orbit` |
 | Windows CI + service smoke test | scaffolded |
 | Release packaging | scaffolded |
 
@@ -112,8 +112,9 @@ tests/          binary and service smoke tests
 ## Upstream contributions
 
 The generic pieces belong upstream. `worbit` keeps the fork
-[`t128n/orbit-cx`](https://github.com/t128n/orbit-cx) as the authoring and PR
-vehicle; this repository only pins and builds.
+[`t128n/orbit`](https://github.com/t128n/orbit) as the authoring and PR
+vehicle; its `main` mirrors upstream and feature branches carry the work.
+This repository only pins and builds.
 
 ## License
 

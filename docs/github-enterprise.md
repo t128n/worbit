@@ -1,7 +1,7 @@
 # GitHub Enterprise
 
 > Status: the configurable-host patch (`0002`) is being ported from
-> `t128n/orbit-cx`. Until it lands, the build talks only to `github.com`.
+> `t128n/orbit`. Until it lands, the build talks only to `github.com`.
 
 ## GHES versus GHEC
 

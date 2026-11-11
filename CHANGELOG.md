@@ -13,4 +13,4 @@ Initial scaffold.
   patch verification against upstream tags, release packaging.
 
 GHEC host support (`0002`) and GitHub polling sync (`0003`) are pending ports
-from `t128n/orbit-cx`.
+from `t128n/orbit`.

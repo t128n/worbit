@@ -3,7 +3,7 @@
 ## Model
 
 `worbit` pins an upstream tag and applies an ordered series. Patches are
-generated from the authoring fork `t128n/orbit-cx`; they are never edited by
+generated from the authoring fork `t128n/orbit`; they are never edited by
 hand.
 
 ```text

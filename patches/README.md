@@ -5,8 +5,8 @@ Base: **Orbit v0.3.0**, commit `a7402204c7cadcac4747cbf47a60685a20f59498`.
 | Patch | Upstream | Contents |
 |---|---|---|
 | `0001-feat-windows-native-service.patch` | #81 | Native SCM service, `--name`/`--env-file`, `ORBIT_LOG_FILE`, Windows backup rename fixes |
-| `0002-feat-ghec-host.patch` | #82 | Pending port from `t128n/orbit-cx` |
-| `0003-feat-github-polling.patch` | #83 | Pending port from `t128n/orbit-cx` |
+| `0002-feat-ghec-host.patch` | #82 | Pending port from `t128n/orbit` |
+| `0003-feat-github-polling.patch` | #83 | Pending port from `t128n/orbit` |
 
 ## 0001 details
 
