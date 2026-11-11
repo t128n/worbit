@@ -13,16 +13,21 @@ if (-not $RepoPath) {
 }
 
 if (-not (Test-Path (Join-Path $RepoPath ".git"))) {
-    if (Test-Path $RepoPath) {
-        throw "$RepoPath exists but is not a git checkout; remove it and retry"
-    }
     $parent = Split-Path -Parent $RepoPath
     if ($parent) {
         New-Item -ItemType Directory -Force $parent | Out-Null
     }
-    Write-Step "Cloning $($lock.Repository)"
-    & git clone --filter=blob:none --no-checkout $lock.Repository $RepoPath
-    Assert-LastExitCode "git clone"
+    if (Test-Path $RepoPath) {
+        # Swatinem/rust-cache restores .work/orbit/target before this script runs.
+        # Initialize the checkout in place so the cached target survives.
+        Write-Step "Initializing a checkout in the existing cache directory $RepoPath"
+        Invoke-Git $RepoPath init -b main
+        Invoke-Git $RepoPath remote add origin $lock.Repository
+    } else {
+        Write-Step "Cloning $($lock.Repository)"
+        & git clone --filter=blob:none --no-checkout $lock.Repository $RepoPath
+        Assert-LastExitCode "git clone"
+    }
 } else {
     Write-Step "Reusing checkout at $RepoPath"
 }
@@ -36,7 +41,9 @@ Invoke-Git $RepoPath fetch --force --tags origin
 Write-Step "Checking out $($lock.Commit)"
 Invoke-Git $RepoPath checkout --detach --force $lock.Commit
 Invoke-Git $RepoPath reset --hard $lock.Commit
-Invoke-Git $RepoPath clean -fdx
+# Keep ignored build caches (target/, node_modules/, apps/web/dist/) across runs;
+# remove only untracked source files such as a previously applied patch.
+Invoke-Git $RepoPath clean -fd
 
 $head = (& git -C $RepoPath rev-parse HEAD).Trim()
 if ($head -ne $lock.Commit) {
