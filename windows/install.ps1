@@ -40,6 +40,53 @@ function Set-DirectoryAcl {
     }
 }
 
+function Set-FileAclReadOnly {
+    param([string]$Path)
+    & icacls.exe $Path /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:R" | Out-Null
+    Assert-ExitCode "icacls $Path"
+    if ($Account) {
+        & icacls.exe $Path /grant:r "${Account}:R" | Out-Null
+        Assert-ExitCode "icacls $Path /grant $Account"
+    }
+}
+
+# Reads one setting from the env file with the same rules Orbit uses: KEY=VALUE,
+# an optional leading `export `, and matching single or double quotes around the
+# value are stripped. The last occurrence wins. Returns $null when the setting
+# is absent.
+function Get-EnvFileValue {
+    param(
+        [string]$Path,
+        [string]$Name
+    )
+    $value = $null
+    foreach ($raw in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        $line = $raw.Trim().TrimStart([char]0xFEFF)
+        if (-not $line -or $line.StartsWith("#")) {
+            continue
+        }
+        if ($line.StartsWith("export ")) {
+            $line = $line.Substring(7).TrimStart()
+        }
+        $separator = $line.IndexOf("=")
+        if ($separator -lt 0) {
+            continue
+        }
+        if ($line.Substring(0, $separator).Trim() -ne $Name) {
+            continue
+        }
+        $value = $line.Substring($separator + 1).Trim()
+        if ($value.Length -ge 2) {
+            $first = $value.Substring(0, 1)
+            $last = $value.Substring($value.Length - 1, 1)
+            if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+        }
+    }
+    return $value
+}
+
 Assert-Administrator
 
 $Source = (Resolve-Path $Source).Path
@@ -52,6 +99,9 @@ foreach ($dir in @("data", "backups", "logs", "config")) {
     New-Item -ItemType Directory -Force (Join-Path $DataDir $dir) | Out-Null
 }
 
+Set-DirectoryAcl $InstallDir
+Set-DirectoryAcl $DataDir
+
 $ConfigPath = Join-Path $DataDir "config/worbit.env"
 if ($EnvFile) {
     $EnvFile = (Resolve-Path $EnvFile).Path
@@ -63,21 +113,60 @@ if ($EnvFile) {
     Copy-Item (Join-Path $PSScriptRoot "worbit.env.example") $ConfigPath
     throw @"
 Created $ConfigPath from the example.
-Edit ORBIT_PUBLIC_ORIGIN, ORBIT_TRUSTED_PROXIES, the paths, and the app key first.
-Generate the app key with:
-  $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Fill($bytes); [Convert]::ToBase64String($bytes)
-Then rerun install.ps1.
+Edit ORBIT_PUBLIC_ORIGIN, ORBIT_TRUSTED_PROXIES, and the paths, then rerun install.ps1.
+The app key is generated automatically on the next run if it is missing.
 "@
 }
 
-Set-DirectoryAcl $InstallDir
-Set-DirectoryAcl $DataDir
-& icacls.exe $ConfigPath /inheritance:r /grant:r "*S-1-5-18:R" "*S-1-5-32-544:R" | Out-Null
-Assert-ExitCode "icacls $ConfigPath"
-if ($Account) {
-    & icacls.exe $ConfigPath /grant:r "${Account}:R" | Out-Null
-    Assert-ExitCode "icacls $ConfigPath /grant $Account"
+# Orbit refuses to start without an app key. Create the configured file on the
+# first install so setup does not need a separate key-generation step.
+$AppKeyPath = Get-EnvFileValue -Path $ConfigPath -Name "ORBIT_APP_KEY_FILE"
+$AppKeyValue = Get-EnvFileValue -Path $ConfigPath -Name "ORBIT_APP_KEY"
+$AppKeyFileConfigured = $null -ne $AppKeyPath
+if (-not $AppKeyFileConfigured) {
+    $AppKeyPath = Join-Path $DataDir "config/app.key"
 }
+if ($null -eq $AppKeyValue) {
+    if ($AppKeyPath -eq "") {
+        throw "ORBIT_APP_KEY_FILE is set but empty in $ConfigPath"
+    }
+    if (-not [System.IO.Path]::IsPathRooted($AppKeyPath)) {
+        throw "ORBIT_APP_KEY_FILE must be an absolute path: $AppKeyPath"
+    }
+    $AppKeyPath = [System.IO.Path]::GetFullPath($AppKeyPath)
+    if (-not (Test-Path -LiteralPath $AppKeyPath)) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $AppKeyPath) | Out-Null
+        $bytes = [byte[]]::new(32)
+        $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+        try {
+            $rng.GetBytes($bytes)
+        } finally {
+            $rng.Dispose()
+        }
+        [System.IO.File]::WriteAllText(
+            $AppKeyPath,
+            [Convert]::ToBase64String($bytes),
+            [System.Text.Encoding]::ASCII)
+        Set-FileAclReadOnly $AppKeyPath
+        Write-Host "Generated app key: $AppKeyPath"
+        Write-Host "Back it up now: without it, saved secrets cannot be decrypted."
+    }
+    if (-not $AppKeyFileConfigured) {
+        # The env file did not name a key file, so point it at the generated one.
+        $contents = [System.IO.File]::ReadAllText($ConfigPath)
+        if ($contents.Length -gt 0 -and -not ($contents.EndsWith("`n") -or $contents.EndsWith("`r"))) {
+            $contents += [Environment]::NewLine
+        }
+        $contents += "ORBIT_APP_KEY_FILE=$AppKeyPath" + [Environment]::NewLine
+        [System.IO.File]::WriteAllText(
+            $ConfigPath,
+            $contents,
+            (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "Added ORBIT_APP_KEY_FILE=$AppKeyPath to $ConfigPath"
+    }
+}
+
+Set-FileAclReadOnly $ConfigPath
 
 $InstalledExe = Join-Path $InstallDir "orbit.exe"
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -142,4 +231,7 @@ Write-Host "  binary: $InstalledExe"
 Write-Host "  config: $ConfigPath"
 Write-Host "  data:   $DataDir"
 Write-Host "  logs:   $(Join-Path $DataDir 'logs/orbit.log')"
+if ($AppKeyPath -and (Test-Path -LiteralPath $AppKeyPath)) {
+    Write-Host "  key:    $AppKeyPath"
+}
 Write-Host "  status: sc.exe query $ServiceName"

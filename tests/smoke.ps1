@@ -26,9 +26,14 @@ $config = Join-Path $data "worbit.env"
 New-Item -ItemType Directory -Force $data | Out-Null
 try {
     $bytes = [byte[]]::new(32)
-    [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
     $key = [Convert]::ToBase64String($bytes)
-    Set-Content (Join-Path $data "app.key") $key -NoNewline
+    Set-Content (Join-Path $data "app.key") $key -NoNewline -Encoding ascii
     @"
 ORBIT_ENV=development
 ORBIT_BIND=127.0.0.1

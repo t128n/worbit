@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0+3
+
+- Create the app key during install when `ORBIT_APP_KEY_FILE` is missing, using
+  APIs available in the built-in Windows PowerShell 5.1. The key file is
+  restricted to SYSTEM, Administrators, and the service account.
+- Add `ORBIT_APP_KEY_FILE` to the env file when neither that setting nor
+  `ORBIT_APP_KEY` is present.
+- Document trying Orbit in development mode before installing the service,
+  including console/log behaviour and the loopback restriction.
+- Run the native service install test under Windows PowerShell 5.1.
+
 ## 0.3.0+2
 
 - Add configurable GitHub Enterprise hosts (`ORBIT_GITHUB_URL`) for GHES and

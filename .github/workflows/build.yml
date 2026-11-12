@@ -72,16 +72,15 @@ jobs:
         shell: pwsh
         run: ./scripts/package.ps1
 
+      # Run this step with Windows PowerShell 5.1, the shell on a stock Windows
+      # Server, so install.ps1 stays compatible there. The installer creates the
+      # app key too, which exercises the first-run path.
       - name: Native service install/start/stop test
-        shell: pwsh
+        shell: powershell
         run: |
           $install = Join-Path $env:ProgramFiles "WorbitTest"
           $data = Join-Path $env:ProgramData "WorbitTest"
           New-Item -ItemType Directory -Force $data | Out-Null
-          $bytes = [byte[]]::new(32)
-          [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-          $key = [Convert]::ToBase64String($bytes)
-          Set-Content (Join-Path $data "app.key") $key -NoNewline
           $envFile = Join-Path $data "test.env"
           @"
           ORBIT_ENV=development
@@ -100,6 +99,11 @@ jobs:
             -DataDir $data `
             -ServiceName WorbitTest `
             -EnvFile $envFile
+
+          $appKey = Join-Path $data "app.key"
+          if (-not (Test-Path -LiteralPath $appKey)) {
+            throw "install.ps1 did not create $appKey"
+          }
 
           $deadline = (Get-Date).AddSeconds(60)
           do {

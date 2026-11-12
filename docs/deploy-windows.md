@@ -15,26 +15,79 @@ under the SCM and starts automatically at boot.
 ## Prerequisites
 
 - Windows Server 2022/2025
+- Windows PowerShell 5.1 or later (the built-in `powershell.exe` is enough)
 - A DNS name and a certificate for the public origin
 - A reverse proxy (IIS with ARR, Caddy, or equivalent)
 - Local disk for the database, attachments, and backups. Do not use SMB shares
   for the SQLite database or its WAL files.
 
+## Try it before installing
+
+Run `orbit.exe` from the extracted folder to try Orbit without registering the
+service. Use development mode and paths under the extraction directory:
+
+```dotenv
+# C:\Temp\worbit\test.env
+ORBIT_ENV=development
+ORBIT_BIND=127.0.0.1
+ORBIT_PORT=8080
+ORBIT_DATABASE_PATH=C:\Temp\worbit\data\orbit.sqlite
+ORBIT_ATTACHMENTS_PATH=C:\Temp\worbit\data\attachments
+ORBIT_BACKUPS_PATH=C:\Temp\worbit\backups
+ORBIT_APP_KEY_FILE=C:\Temp\worbit\app.key
+```
+
+Do not set `ORBIT_TRUSTED_PROXIES` in development, and leave out
+`ORBIT_LOG_FILE`: with a log file configured, runtime logs go there instead of
+the console. `ORBIT_PUBLIC_ORIGIN` defaults to `http://127.0.0.1:8080` in
+development.
+
+Generate the app key once with Windows PowerShell 5.1 or later:
+
+```powershell
+$bytes = [byte[]]::new(32)
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+[System.IO.File]::WriteAllText(
+  "C:\Temp\worbit\app.key",
+  [Convert]::ToBase64String($bytes),
+  [System.Text.Encoding]::ASCII)
+```
+
+Then start it:
+
+```powershell
+$env:ORBIT_ENV_FILE = "C:\Temp\worbit\test.env"
+.\orbit.exe config check
+.\orbit.exe serve
+```
+
+`serve` does not print a "listening" line. While setup is incomplete it prints
+`Initial setup URL: ...`; otherwise the console stays quiet. Confirm the
+listener and health endpoint in a second prompt:
+
+```powershell
+Get-NetTCPConnection -State Listen -LocalPort 8080
+Invoke-WebRequest http://127.0.0.1:8080/health/live -UseBasicParsing
+```
+
+Open `http://127.0.0.1:8080` on the server itself. `127.0.0.1` in another
+machine's browser points at that machine, and development mode refuses a
+non-loopback bind. Use RDP or a tunnel for a remote test.
+
+If nothing answers, `.\orbit.exe config show` prints the effective bind address,
+port and paths; set `RUST_LOG=debug` for verbose console logs. If
+`ORBIT_LOG_FILE` is set, read that file instead.
+
 ## Install
 
 ```powershell
 # Elevated prompt
-Expand-Archive .\worbit-windows-x86_64-0.3.0+1.zip C:\Temp\worbit
+Expand-Archive .\worbit-windows-x86_64-0.3.0+3.zip C:\Temp\worbit
 cd C:\Temp\worbit
 
 Copy-Item .\worbit.env.example .\worbit.env
 notepad .\worbit.env
-
-# Generate the app key once and save it as a single line.
-$key = [byte[]]::new(32)
-[Security.Cryptography.RandomNumberGenerator]::Fill($key)
-[Convert]::ToBase64String($key) |
-  Set-Content C:\ProgramData\Worbit\config\app.key -NoNewline
 
 .\install.ps1 -EnvFile .\worbit.env
 ```
@@ -42,6 +95,13 @@ $key = [byte[]]::new(32)
 `install.ps1` installs to `C:\Program Files\Worbit`, keeps state under
 `C:\ProgramData\Worbit`, applies ACLs, validates the configuration, registers
 the service, and starts it.
+
+On the first install it also creates the app key at the path in
+`ORBIT_APP_KEY_FILE` (default `C:\ProgramData\Worbit\config\app.key`) if that
+file does not exist, unless `ORBIT_APP_KEY` is set. If the env file names neither
+setting, the installer adds `ORBIT_APP_KEY_FILE` for the default path. Back the
+key up immediately: it is not in the database backup, and a restored database
+cannot decrypt saved secrets without it.
 
 ## Configuration
 

@@ -78,7 +78,8 @@ The published zip contains `orbit.exe`, `install.ps1`, `uninstall.ps1`, and
 ```
 
 `install.ps1` copies `orbit.exe` to a stable path, applies directory ACLs,
-validates the configuration, and registers the service with the SCM.
+generates `app.key` if it is missing, validates the configuration, and registers
+the service with the SCM.
 
 ```powershell
 Start-Service Orbit
